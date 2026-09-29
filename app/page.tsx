@@ -52,6 +52,8 @@ export default function Home() {
 
   const [error, setError] = useState("");
 
+// Has the human reviewer confirmed this result?
+const [isConfirmed, setIsConfirmed] = useState(false);
 
   // -----------------------------
   // Send feedback to our AI API
@@ -66,6 +68,8 @@ export default function Home() {
     setError("");
     setResult(null);
     setReviewedResult(null);
+    setIsConfirmed(false);
+
 
     try {
       const response = await fetch("/api/analyze", {
@@ -139,6 +143,33 @@ export default function Home() {
     });
   }
 
+
+// ------------------------------------
+// Confirm the human-reviewed result
+// ------------------------------------
+
+function confirmClassification() {
+  if (!result || !reviewedResult) {
+    return;
+  }
+
+  // For now, this does not save to a database. It only marks the review as complete in the UI.
+  setIsConfirmed(true);
+
+  console.log("Classification confirmed", {
+    feedback: feedback,
+
+    ai_prediction: {
+      type: result.type,
+      severity: result.severity,
+    },
+
+    human_review: {
+      type: reviewedResult.type,
+      severity: reviewedResult.severity,
+    },
+  });
+}
 
   return (
     <main className="min-h-screen bg-gray-50 px-6 py-12">
@@ -295,6 +326,7 @@ export default function Home() {
                   id="type"
 
                   value={reviewedResult.type}
+                  disabled={isConfirmed}
 
                   onChange={(event) =>
                     updateType(
@@ -353,6 +385,7 @@ export default function Home() {
                   id="severity"
 
                   value={reviewedResult.severity}
+                  disabled={isConfirmed}
 
                   onChange={(event) =>
                     updateSeverity(
@@ -418,6 +451,39 @@ export default function Home() {
               </p>
 
             </div>
+            {/* ---------------------------
+            Human review actions
+            ---------------------------- */}
+
+            <div className="mt-6 border-t border-gray-200 pt-6">
+
+              {!isConfirmed ? (
+               <div className="flex items-center justify-between gap-4">
+
+                 <p className="text-sm text-gray-500">
+                    Confirm once you have reviewed the AI classification.
+                  </p>
+
+                  <button
+                    onClick={confirmClassification}
+                    className="rounded-xl bg-gray-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-gray-700"
+                  >
+                    Confirm classification
+                  </button>
+                </div>
+) : (
+              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                <p className="font-medium text-green-800">
+                  Change of values confirmed
+                </p>
+
+                <p className="mt-1 text-sm text-green-700">
+                  This value has been changed by a human.
+                </p>
+              </div>
+)}
+
+</div>
 
           </section>
         )}
