@@ -1,92 +1,153 @@
 "use client";
 
-// We use React state to store:
-// - the text the user types
-// - the AI result
-// - loading state
-// - error messages
 import { useState } from "react";
 
-// This describes the exact shape of the data we expect back from our /api/analyze endpoint.
+
+// -----------------------------
+// Allowed classification values
+// -----------------------------
+// values are valid in our dropdowns.
+
+type FeedbackType =
+  | "bug"
+  | "feature_request"
+  | "praise"
+  | "question"
+  | "other";
+
+type Severity =
+  | "critical"
+  | "high"
+  | "medium"
+  | "low";
+
+
+// -----------------------------
+// Shape of our AI response
+// -----------------------------
+
 type Analysis = {
   theme: string;
-  type: string;
-  severity: string;
+  type: FeedbackType;
+  severity: Severity;
   sentiment: string;
   summary: string;
   needs_review: boolean;
 };
 
+
 export default function Home() {
-  // Stores the customer feedback typed into the textarea.
+  // The customer feedback typed by the user.
   const [feedback, setFeedback] = useState("");
 
-  // Stores the structured response returned by the AI. defualt value is null
+  // The ORIGINAL prediction returned by the AI.
   const [result, setResult] = useState<Analysis | null>(null);
 
-  // Used to show "Analyzing..." while the API request is running.
+  // The PM can change Type and Severity here.
+  const [reviewedResult, setReviewedResult] =
+    useState<Analysis | null>(null);
+
+  // Loading state for the API request.
   const [loading, setLoading] = useState(false);
 
-  // Stores an error message if something goes wrong.
   const [error, setError] = useState("");
 
-  // This function runs when the user clicks "Analyze feedback".
-  async function analyzeFeedback() {
 
+  // -----------------------------
+  // Send feedback to our AI API
+  // -----------------------------
+
+  async function analyzeFeedback() {
     if (!feedback.trim()) {
       return;
     }
 
-    // Reset the UI before starting a new request.
     setLoading(true);
     setError("");
     setResult(null);
+    setReviewedResult(null);
 
     try {
-      // Send the feedback to our own backend API route.
-  
-      // This calls: app/api/analyze/route.ts
       const response = await fetch("/api/analyze", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
 
-        // Convert the JavaScript object into JSON.
-     
         body: JSON.stringify({
           feedback: feedback,
         }),
       });
 
-      // If our API returns an error status like 400 or 500, stop here and move into the catch block below.
       if (!response.ok) {
         throw new Error("Failed to analyze feedback");
       }
 
-      // Convert the JSON response from our backend into a normal JavaScript object.
-      const data = await response.json();
+      const data: Analysis = await response.json();
 
+      // Save the AI's original prediction.
       setResult(data);
+
+      // Also create an editable copy for human review.
+      setReviewedResult(data);
+
     } catch (error) {
-  
       console.error(error);
 
       setError(
         "Something went wrong while analyzing the feedback."
       );
     } finally {
-      // This runs whether the request succeeded or failed.
       setLoading(false);
     }
   }
 
+
+  // --------------------------------
+  // Update the reviewed Type value
+  // --------------------------------
+
+  function updateType(newType: FeedbackType) {
+    setReviewedResult((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        type: newType,
+      };
+    });
+  }
+
+
+  // ------------------------------------
+  // Update the reviewed Severity value
+  // ------------------------------------
+
+  function updateSeverity(newSeverity: Severity) {
+    setReviewedResult((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        severity: newSeverity,
+      };
+    });
+  }
+
+
   return (
-    // Main page container.
     <main className="min-h-screen bg-gray-50 px-6 py-12">
 
-      {/* Keeps the content centered and prevents it becoming too wide. */}
       <div className="mx-auto max-w-3xl">
+
+        {/* ---------------------------
+            Page header
+        ---------------------------- */}
 
         <header className="mb-10">
 
@@ -105,7 +166,11 @@ export default function Home() {
 
         </header>
 
-        {/* Customer feedback input area */}
+
+        {/* ---------------------------
+            Feedback input
+        ---------------------------- */}
+
         <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
 
           <label
@@ -117,12 +182,11 @@ export default function Home() {
 
           <textarea
             id="feedback"
-
-            // The textarea always displays the value stored in our feedback state.
             value={feedback}
 
-            // Every time the user types, update the feedback state.
-            onChange={(event) => setFeedback(event.target.value)}
+            onChange={(event) =>
+              setFeedback(event.target.value)
+            }
 
             placeholder="Example: I tried exporting my report three times and it keeps crashing..."
 
@@ -131,52 +195,67 @@ export default function Home() {
 
           <div className="mt-4 flex items-center justify-between">
 
-            {/* Show the number of characters entered. */}
             <p className="text-sm text-gray-500">
               {feedback.length} characters
             </p>
 
             <button
-              // Call our function when the user clicks the button.
               onClick={analyzeFeedback}
 
-              // Disable the button while loading  or when the text box is empty.
-              disabled={loading || !feedback.trim()}
+              disabled={
+                loading ||
+                !feedback.trim()
+              }
 
               className="rounded-xl bg-gray-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {/* Change the button text while the request is running. */}
-              {loading ? "Analyzing..." : "Analyze feedback"}
+              {loading
+                ? "Analyzing..."
+                : "Analyze feedback"}
             </button>
 
           </div>
 
         </section>
 
-        {/* Only show this section if an error exists. */}
+
+        {/* ---------------------------
+            Error message
+        ---------------------------- */}
+
         {error && (
           <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        {/* Only show the AI results after we have a result. */}
-        {result && (
+
+        {/* ---------------------------
+            AI result + human review
+        ---------------------------- */}
+
+        {result && reviewedResult && (
           <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
 
             <div className="flex items-start justify-between gap-4">
 
               <div>
+
                 <p className="text-sm font-medium text-gray-500">
                   AI analysis
                 </p>
 
                 <h2 className="mt-1 text-2xl font-semibold text-gray-900">
-                  Product insight
+                  Review classification
                 </h2>
+
+                <p className="mt-2 text-sm text-gray-500">
+                  Review the AI prediction and correct it if necessary.
+                </p>
+
               </div>
 
-              {/* Only show this badge when the model says human review is needed. */}
+
               {result.needs_review && (
                 <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-medium text-yellow-800">
                   Needs review
@@ -185,23 +264,136 @@ export default function Home() {
 
             </div>
 
-            {/* Grid containing the structured AI classifications. */}
+
+            {/* ---------------------------
+                Classification grid
+            ---------------------------- */}
+
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
+
+
+              {/* Theme remains read-only */}
 
               <ResultCard
                 label="Theme"
                 value={result.theme}
               />
 
-              <ResultCard
-                label="Type"
-                value={result.type}
-              />
 
-              <ResultCard
-                label="Severity"
-                value={result.severity}
-              />
+              {/* TYPE is now editable */}
+
+              <div className="rounded-xl border border-gray-200 p-4">
+
+                <label
+                  htmlFor="type"
+                  className="text-sm text-gray-500"
+                >
+                  Type
+                </label>
+
+                <select
+                  id="type"
+
+                  value={reviewedResult.type}
+
+                  onChange={(event) =>
+                    updateType(
+                      event.target.value as FeedbackType
+                    )
+                  }
+
+                  className="mt-2 w-full rounded-lg border border-gray-300 bg-white p-2 font-semibold text-gray-900"
+                >
+                  <option value="bug">
+                    Bug
+                  </option>
+
+                  <option value="feature_request">
+                    Feature request
+                  </option>
+
+                  <option value="praise">
+                    Praise
+                  </option>
+
+                  <option value="question">
+                    Question
+                  </option>
+
+                  <option value="other">
+                    Other
+                  </option>
+                </select>
+
+
+                {/* Show this message if the human changed the AI prediction */}
+
+                {reviewedResult.type !== result.type && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    AI suggested:{" "}
+                    {formatValue(result.type)}
+                  </p>
+                )}
+
+              </div>
+
+
+              {/* SEVERITY is now editable */}
+
+              <div className="rounded-xl border border-gray-200 p-4">
+
+                <label
+                  htmlFor="severity"
+                  className="text-sm text-gray-500"
+                >
+                  Severity
+                </label>
+
+                <select
+                  id="severity"
+
+                  value={reviewedResult.severity}
+
+                  onChange={(event) =>
+                    updateSeverity(
+                      event.target.value as Severity
+                    )
+                  }
+
+                  className="mt-2 w-full rounded-lg border border-gray-300 bg-white p-2 font-semibold text-gray-900"
+                >
+                  <option value="critical">
+                    Critical
+                  </option>
+
+                  <option value="high">
+                    High
+                  </option>
+
+                  <option value="medium">
+                    Medium
+                  </option>
+
+                  <option value="low">
+                    Low
+                  </option>
+                </select>
+
+
+                {/* Show original AI prediction if corrected */}
+
+                {reviewedResult.severity !==
+                  result.severity && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    AI suggested:{" "}
+                    {formatValue(result.severity)}
+                  </p>
+                )}
+
+              </div>
+
+
+              {/* Sentiment remains read-only */}
 
               <ResultCard
                 label="Sentiment"
@@ -210,7 +402,11 @@ export default function Home() {
 
             </div>
 
-            {/* AI-generated summary */}
+
+            {/* ---------------------------
+                AI-generated summary
+            ---------------------------- */}
+
             <div className="mt-6 rounded-xl bg-gray-50 p-5">
 
               <p className="text-sm font-medium text-gray-500">
@@ -227,17 +423,16 @@ export default function Home() {
         )}
 
       </div>
+
     </main>
   );
 }
 
 
-// Example:
-//
-// <ResultCard
-//   label="Severity"
-//   value="high"
-// />
+// -----------------------------
+// Read-only result card
+// -----------------------------
+
 function ResultCard({
   label,
   value,
@@ -253,16 +448,20 @@ function ResultCard({
       </p>
 
       <p className="mt-1 font-semibold capitalize text-gray-900">
-
-        {/* Converts values like:
-            feature_request
-            into:
-            feature request
-        */}
-        {value.replaceAll("_", " ")}
-
+        {formatValue(value)}
       </p>
 
     </div>
   );
+}
+
+
+// -----------------------------
+// Format internal values nicely
+// -----------------------------
+
+// Example: feature_request. becomes: feature request
+
+function formatValue(value: string) {
+  return value.replaceAll("_", " ");
 }
